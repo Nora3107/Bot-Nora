@@ -80,11 +80,14 @@ function setupPlayerEvents(player) {
         channel.send({ embeds: [errorEmbed(`Không thể phát bài này. Đang thử bài tiếp theo...`)] }).catch(() => {});
     });
 
-    // Debug logging
+    // ⚠️ QUAN TRỌNG: Phải lắng nghe error trên cả player (không chỉ player.events)
+    // Nếu thiếu, bot sẽ crash với "No event listener found for event error"
+    player.on('error', (error) => {
+        console.error('[Player Error]:', error.message || error);
+    });
+
     player.events.on('debug', (queue, message) => {
-        if (process.env.NODE_ENV !== 'production') {
-            // console.log(`[Player Debug] ${message}`);
-        }
+        // Chỉ log debug trong dev
     });
 
     console.log('✅ Player events registered');
