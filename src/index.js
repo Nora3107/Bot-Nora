@@ -50,17 +50,20 @@ client.once('ready', async () => {
     // Set bot status
     client.user.setActivity(`${config.prefix}help | 🎵 Music`, { type: 2 }); // Type 2 = Listening
 
-    // Khởi tạo Player
-    const player = await initPlayer(client);
-
-    // Đăng ký player events
-    setupPlayerEvents(player);
+    // Khởi tạo Player — wrap trong try-catch để bot không crash
+    try {
+        const player = await initPlayer(client);
+        setupPlayerEvents(player);
+        console.log('✅ Bot đã sẵn sàng hoàn toàn!');
+    } catch (err) {
+        console.error('❌ Lỗi khởi tạo Player (bot vẫn online nhưng chưa phát nhạc được):', err.message);
+    }
 });
 
 // Đăng ký message handler cho prefix commands
 setupMessageHandler(client);
 
-// Xử lý lỗi không bắt được
+// Xử lý lỗi không bắt được — ĐẶT TRƯỚC login
 process.on('unhandledRejection', (error) => {
     console.error('Unhandled promise rejection:', error);
 });
@@ -79,4 +82,9 @@ if (!config.token || config.token === 'your_discord_bot_token_here') {
     process.exit(1);
 }
 
-client.login(config.token);
+console.log('🔑 Đang kết nối Discord...');
+client.login(config.token).catch((err) => {
+    console.error('❌ Không thể đăng nhập Discord:', err.message);
+    console.error('   Kiểm tra lại DISCORD_TOKEN trong Environment Variables!');
+});
+
