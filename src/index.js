@@ -76,40 +76,61 @@ process.on('uncaughtException', (error) => {
 startServer();
 
 // Login
-const token = (config.token || '').trim(); // Trim whitespace/newlines
+const token = (config.token || '').trim();
 
 if (!token || token === 'your_discord_bot_token_here') {
-    console.error('❌ Thiếu DISCORD_TOKEN! Vui lòng thêm token vào file .env');
+    console.error('❌ Thiếu DISCORD_TOKEN!');
     process.exit(1);
 }
 
-// Debug: hiển thị token info (che dấu an toàn)
 console.log(`🔑 Token info: length=${token.length}, starts="${token.substring(0, 5)}...", ends="...${token.substring(token.length - 5)}"`);
-console.log('🔑 Đang kết nối Discord...');
 
-// Timeout 30 giây — nếu bot không connect được sẽ báo
-const loginTimeout = setTimeout(() => {
-    console.error('⏰ CẢNH BÁO: Đã 30 giây mà bot vẫn chưa kết nối Discord!');
-    console.error('   Nguyên nhân có thể: Token sai, network bị chặn, hoặc Discord API đang chậm.');
-}, 30000);
+// Test kết nối tới Discord API trước khi login
+const https = require('https');
+console.log('🌐 Đang test kết nối tới Discord API...');
 
-// Lắng nghe các sự kiện để debug
-client.on('error', (err) => {
-    console.error('❌ Client error:', err.message);
+const testReq = https.get('https://discord.com/api/v10/gateway', { timeout: 15000 }, (res) => {
+    let data = '';
+    res.on('data', (chunk) => data += chunk);
+    res.on('end', () => {
+        console.log(`✅ Discord API reachable! Status: ${res.statusCode}, Gateway: ${data}`);
+        console.log('🔑 Đang kết nối Discord...');
+        doLogin();
+    });
 });
 
-client.on('warn', (msg) => {
-    console.warn('⚠️ Client warning:', msg);
+testReq.on('error', (err) => {
+    console.error(`❌ KHÔNG THỂ kết nối Discord API: ${err.message}`);
+    console.error('   Render có thể đang chặn kết nối. Thử login anyway...');
+    doLogin();
 });
 
-client.login(token)
-    .then(() => {
-        clearTimeout(loginTimeout);
-        console.log('✅ Login thành công!');
-    })
-    .catch((err) => {
-        clearTimeout(loginTimeout);
-        console.error('❌ Không thể đăng nhập Discord:', err.message);
-        console.error('   Kiểm tra lại DISCORD_TOKEN trong Environment Variables!');
+testReq.on('timeout', () => {
+    console.error('⏰ Discord API test TIMEOUT (15s)! Network có vấn đề.');
+    testReq.destroy();
+    doLogin();
+});
+
+function doLogin() {
+    // Lắng nghe các sự kiện để debug
+    client.on('error', (err) => {
+        console.error('❌ Client error:', err.message);
+    });
+    client.on('warn', (msg) => {
+        console.warn('⚠️ Client warning:', msg);
     });
 
+    const loginTimeout = setTimeout(() => {
+        console.error('⏰ CẢNH BÁO: Đã 30 giây mà bot vẫn chưa kết nối Discord!');
+    }, 30000);
+
+    client.login(token)
+        .then(() => {
+            clearTimeout(loginTimeout);
+            console.log('✅ Login thành công!');
+        })
+        .catch((err) => {
+            clearTimeout(loginTimeout);
+            console.error('❌ Login thất bại:', err.message);
+        });
+}
