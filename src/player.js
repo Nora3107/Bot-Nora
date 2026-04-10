@@ -1,5 +1,4 @@
 const { Player } = require('discord-player');
-const { DefaultExtractors } = require('@discord-player/extractor');
 const config = require('./config');
 
 /**
@@ -12,10 +11,11 @@ async function initPlayer(client) {
         skipFFmpeg: false,
     });
 
-    // Load tất cả extractors mặc định (Spotify, SoundCloud, Apple Music, etc.)
-    await player.extractors.loadMulti(DefaultExtractors);
+    // Load tất cả extractors mặc định (Spotify, SoundCloud, Apple Music, YouTube, etc.)
+    await player.extractors.loadDefault();
+    console.log(`✅ Loaded ${player.extractors.size} default extractors`);
 
-    // Load YoutubeiExtractor cho YouTube ổn định hơn
+    // Load YoutubeiExtractor cho YouTube ổn định hơn (nếu có)
     try {
         const { YoutubeiExtractor } = require('discord-player-youtubei');
         await player.extractors.register(YoutubeiExtractor, {});
@@ -24,9 +24,10 @@ async function initPlayer(client) {
         console.log('⚠️ YoutubeiExtractor not available, using default YouTube extractor');
     }
 
-    console.log(`✅ Loaded ${player.extractors.size} extractors`);
+    console.log(`✅ Total extractors: ${player.extractors.size}`);
 
     return player;
 }
 
 module.exports = { initPlayer };
+
