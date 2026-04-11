@@ -137,7 +137,7 @@ async function searchTracks(query, platform = 'auto') {
  * @param {string} url - URL bài hát
  * @returns {Promise<string>} Direct audio URL
  */
-function getAudioUrl(url) {
+function getAudioUrl(url, title = '') {
     return new Promise((resolve, reject) => {
         execFile(YT_DLP_PATH, [
             url,
@@ -145,12 +145,34 @@ function getAudioUrl(url) {
             '--no-warnings',
             '--format', 'bestaudio/best',
             '--get-url',
+            // Thêm bypass params cho YouTube
+            '--extractor-args', 'youtube:player_client=android,web',
+            '--force-ipv4',
         ], { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
             if (error) {
+                // Nếu lỗi từ YouTube, tự động thử fallback qua SoundCloud
+                if (url.includes('youtube.com') || url.includes('youtu.be')) {
+                    if (title) {
+                        console.log(`[Stream] YouTube fetch failed, falling back to SoundCloud for: ${title}`);
+                        const scQuery = `scsearch1:${title}`;
+                        return execFile(YT_DLP_PATH, [
+                            scQuery,
+                            '--no-check-certificates',
+                            '--no-warnings',
+                            '--format', 'bestaudio/best',
+                            '--get-url',
+                        ], { maxBuffer: 1024 * 1024 }, (err2, stdout2) => {
+                            if (err2) return reject(new Error('SoundCloud fallback also failed.'));
+                            const audioUrl = stdout2.trim().split('\n')[0];
+                            if (!audioUrl) return reject(new Error('No audio URL from SoundCloud fallback'));
+                            resolve(audioUrl);
+                        });
+                    }
+                }
                 reject(new Error(stderr || error.message));
                 return;
             }
-            const audioUrl = stdout.trim().split('\n')[0]; // Lấy dòng đầu tiên
+            const audioUrl = stdout.trim().split('\n')[0];
             if (!audioUrl) {
                 reject(new Error('No audio URL returned'));
                 return;
@@ -165,14 +187,15 @@ function getAudioUrl(url) {
  * 1. yt-dlp --get-url → lấy direct audio URL
  * 2. ffmpeg đọc trực tiếp URL đó → output PCM 48kHz stereo
  */
-async function createStream(url) {
+async function createStream(track) {
     const ffmpegPath = require('ffmpeg-static');
     
-    // Bước 1: Lấy direct audio URL
-    const audioUrl = await getAudioUrl(url);
-    console.log(`[Stream] Got audio URL for: ${url.substring(0, 60)}...`);
+    // Bước 1: Lấy direct audio URL, hỗ trợ fallback qua titles
+    const searchTitle = `${track.title} ${track.author}`;
+    const audioUrl = await getAudioUrl(track.url, searchTitle);
+    console.log(`[Stream] Got audio URL for: ${track.url.substring(0, 60)}...`);
 
-    // Bước 2: FFmpeg đọc URL trực tiếp → output OGG/Opus (Discord native format)
+    // Bước 2: FFmpeg đọc URL trực tiếp → output PCM s16le (tốt cho inlineVolume của Discord)
     const ffmpegProcess = spawn(ffmpegPath, [
         '-reconnect', '1',
         '-reconnect_streamed', '1',
@@ -180,12 +203,11 @@ async function createStream(url) {
         '-i', audioUrl,           // Input từ direct URL
         '-analyzeduration', '0',
         '-loglevel', '0',
-        '-acodec', 'libopus',     // Encode sang Opus
-        '-f', 'opus',             // Format OGG/Opus
-        '-ar', '48000',           // 48kHz (Discord standard)
+        '-f', 's16le',            // Chuyển sang raw PCM 16-bit little-endian
+        '-ar', '48000',           // 48kHz
         '-ac', '2',               // Stereo
-        '-b:a', '128k',           // Bitrate
         'pipe:1',                 // Output tới stdout
+
     ], { stdio: ['pipe', 'pipe', 'pipe'] });
 
     ffmpegProcess.stderr.on('data', (data) => {
@@ -384,7 +406,7 @@ async function playTrack(queue, track) {
         }
 
         // Tạo stream từ yt-dlp + ffmpeg
-        const { stream, cleanup } = await createStream(track.url);
+        const { stream, cleanup } = await createStream(track);
         queue.currentCleanup = cleanup;
 
         // Debug: theo dõi data flowing
@@ -400,7 +422,7 @@ async function playTrack(queue, track) {
 
         // Tạo audio resource
         const resource = createAudioResource(stream, {
-            inputType: StreamType.Arbitrary,
+            inputType: StreamType.Raw,
             inlineVolume: true,
         });
 
