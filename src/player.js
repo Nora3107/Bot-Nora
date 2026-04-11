@@ -150,24 +150,25 @@ function getAudioUrl(url, title = '') {
             '--force-ipv4',
         ], { maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
             if (error) {
-                // Nếu lỗi từ YouTube, tự động thử fallback qua SoundCloud
-                if (url.includes('youtube.com') || url.includes('youtu.be')) {
-                    if (title) {
-                        console.log(`[Stream] YouTube fetch failed, falling back to SoundCloud for: ${title}`);
-                        const scQuery = `scsearch1:${title}`;
-                        return execFile(YT_DLP_PATH, [
-                            scQuery,
-                            '--no-check-certificates',
-                            '--no-warnings',
-                            '--format', 'bestaudio/best',
-                            '--get-url',
-                        ], { maxBuffer: 1024 * 1024 }, (err2, stdout2) => {
-                            if (err2) return reject(new Error('SoundCloud fallback also failed.'));
-                            const audioUrl = stdout2.trim().split('\n')[0];
-                            if (!audioUrl) return reject(new Error('No audio URL from SoundCloud fallback'));
-                            resolve(audioUrl);
-                        });
-                    }
+                // Tự động thử fallback qua SoundCloud cho TẤT CẢ các lỗi fetch link từ yt-dlp
+                if (title) {
+                    console.log(`[Stream] Direct stream fetch failed, falling back to SoundCloud for: ${title}`);
+                    const scQuery = `scsearch1:${title}`;
+                    return execFile(YT_DLP_PATH, [
+                        scQuery,
+                        '--no-check-certificates',
+                        '--no-warnings',
+                        '--format', 'bestaudio/best',
+                        '--get-url',
+                    ], { maxBuffer: 1024 * 1024 }, (err2, stdout2) => {
+                        if (err2) {
+                            console.error(`[Stream Fallback Error]`, err2.message);
+                            return reject(new Error('Audio stream and SoundCloud fallback both failed. ' + error.message));
+                        }
+                        const audioUrl = stdout2.trim().split('\n')[0];
+                        if (!audioUrl) return reject(new Error('No audio URL from SoundCloud fallback'));
+                        resolve(audioUrl);
+                    });
                 }
                 reject(new Error(stderr || error.message));
                 return;
