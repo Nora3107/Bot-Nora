@@ -1,14 +1,14 @@
-const { useMainPlayer, QueryType } = require('discord-player');
 const { StringSelectMenuBuilder, ActionRowBuilder, ComponentType } = require('discord.js');
 const { createEmbed, errorEmbed, loadingEmbed, trackAddedEmbed } = require('../utils/embed');
 const { truncate, isURL } = require('../utils/formatters');
+const { searchTracks, addTrack, getQueue } = require('../player');
 const config = require('../config');
 
 module.exports = {
     name: 'play',
     aliases: ['p'],
-    description: 'Phát nhạc từ YouTube, Spotify, SoundCloud hoặc tìm kiếm bằng từ khóa',
-    usage: 'n!play <link hoặc từ khóa>',
+    description: 'Phát nhạc từ YouTube, SoundCloud, hoặc tìm kiếm bằng từ khóa',
+    usage: 'n!play <link hoặc từ khóa> | n!play sc <từ khóa> | n!play yt <từ khóa>',
 
     async execute(message, args) {
         // Kiểm tra user có trong voice channel không
@@ -23,63 +23,52 @@ module.exports = {
             return message.reply({ embeds: [errorEmbed('Tôi không có quyền kết nối hoặc phát âm thanh trong kênh thoại này!')] });
         }
 
-        const query = args.join(' ');
+        let query = args.join(' ');
         if (!query) {
-            return message.reply({ embeds: [errorEmbed('Vui lòng nhập tên bài hát hoặc link!\nVD: `n!play never gonna give you up` hoặc `n!play <YouTube/Spotify URL>`')] });
+            return message.reply({ embeds: [errorEmbed(
+                'Vui lòng nhập tên bài hát hoặc link!\n' +
+                'VD:\n' +
+                '`n!play hachimi mambo` — Tìm trên YouTube\n' +
+                '`n!play sc hachimi` — Tìm trên SoundCloud\n' +
+                '`n!play <URL>` — Phát link trực tiếp'
+            )] });
         }
 
-        const player = useMainPlayer();
+        // Kiểm tra tiền tố để chọn nền tảng tìm kiếm
+        let platform = 'youtube'; // Mặc định YouTube (thư viện nhạc lớn nhất)
+        let platformName = 'YouTube';
 
-        // Nếu là URL → phát trực tiếp
+        if (query.toLowerCase().startsWith('sc ')) {
+            platform = 'soundcloud';
+            platformName = 'SoundCloud';
+            query = query.slice(3).trim();
+        } else if (query.toLowerCase().startsWith('yt ')) {
+            platform = 'youtube';
+            platformName = 'YouTube';
+            query = query.slice(3).trim();
+        }
+
+        // ═══════════════════════════════════════════
+        //  Nếu là URL → phát trực tiếp
+        // ═══════════════════════════════════════════
         if (isURL(query)) {
             const loadingMsg = await message.reply({ embeds: [loadingEmbed('Đang tải bài hát...')] });
 
             try {
-                const result = await player.search(query, {
-                    requestedBy: message.author,
-                });
+                const tracks = await searchTracks(query, 'auto');
 
-                if (!result || result.isEmpty()) {
+                if (!tracks || tracks.length === 0) {
                     return loadingMsg.edit({ embeds: [errorEmbed('Không tìm thấy bài hát từ link này!')] });
                 }
 
-                const { track } = await player.play(voiceChannel, result, {
-                    nodeOptions: {
-                        metadata: {
-                            channel: message.channel,
-                            requestedBy: message.author,
-                        },
-                        volume: config.player.defaultVolume,
-                        leaveOnEmpty: config.player.leaveOnEmpty,
-                        leaveOnEmptyCooldown: config.player.leaveOnEmptyCooldown,
-                        leaveOnEnd: config.player.leaveOnEnd,
-                        leaveOnEndCooldown: config.player.leaveOnEndCooldown,
-                        selfDeaf: config.player.selfDeaf,
-                    },
-                    requestedBy: message.author,
+                const track = tracks[0];
+                track.requestedBy = message.author;
+
+                const result = await addTrack(message.guild, voiceChannel, message.channel, track);
+
+                await loadingMsg.edit({
+                    embeds: [trackAddedEmbed(track, result.position || 1)],
                 });
-
-                const queue = player.queues.get(message.guild.id);
-                const position = queue ? queue.tracks.size : 0;
-
-                if (result.playlist) {
-                    await loadingMsg.edit({
-                        embeds: [createEmbed({
-                            title: `${config.emojis.success} Đã thêm Playlist`,
-                            description: [
-                                `**${result.playlist.title}**`,
-                                `${config.emojis.music} **${result.tracks.length}** bài hát`,
-                                `${config.emojis.link} [Link](${result.playlist.url})`,
-                            ].join('\n'),
-                            color: config.colors.success,
-                            thumbnail: result.playlist.thumbnail?.url || result.tracks[0]?.thumbnail,
-                        })],
-                    });
-                } else {
-                    await loadingMsg.edit({
-                        embeds: [trackAddedEmbed(track, position + 1)],
-                    });
-                }
 
             } catch (error) {
                 console.error('Play error:', error);
@@ -88,22 +77,22 @@ module.exports = {
             return;
         }
 
-        // Nếu là từ khóa → Tìm kiếm và hiển thị danh sách chọn
-        const loadingMsg = await message.reply({ embeds: [loadingEmbed(`Đang tìm kiếm: **${truncate(query, 80)}**...`)] });
+        // ═══════════════════════════════════════════
+        //  Nếu là từ khóa → Tìm kiếm và hiển thị danh sách chọn
+        // ═══════════════════════════════════════════
+        const loadingMsg = await message.reply({ embeds: [loadingEmbed(`Đang tìm trên **${platformName}**: **${truncate(query, 70)}**...`)] });
 
         try {
-            const result = await player.search(query, {
-                requestedBy: message.author,
-            });
+            const tracks = await searchTracks(query, platform);
 
-            if (!result || result.isEmpty()) {
-                return loadingMsg.edit({ embeds: [errorEmbed(`Không tìm thấy kết quả cho: **${truncate(query, 50)}**`)] });
+            if (!tracks || tracks.length === 0) {
+                return loadingMsg.edit({ embeds: [errorEmbed(`Không tìm thấy kết quả trên ${platformName} cho: **${truncate(query, 50)}**`)] });
             }
 
-            const tracks = result.tracks.slice(0, config.search.maxResults);
+            const displayTracks = tracks.slice(0, config.search.maxResults);
 
             // Tạo danh sách kết quả tìm kiếm
-            const trackList = tracks.map((t, i) => {
+            const trackList = displayTracks.map((t, i) => {
                 return `\`${i + 1}.\` **${truncate(t.title, 55)}** — ${t.author} \`[${t.duration}]\``;
             }).join('\n');
 
@@ -112,7 +101,7 @@ module.exports = {
                 .setCustomId(`search_${message.id}`)
                 .setPlaceholder('🎵 Chọn bài hát bạn muốn phát...')
                 .addOptions(
-                    tracks.map((track, index) => ({
+                    displayTracks.map((track, index) => ({
                         label: truncate(track.title, 95),
                         description: truncate(`${track.author} • ${track.duration}`, 95),
                         value: index.toString(),
@@ -123,8 +112,8 @@ module.exports = {
             const row = new ActionRowBuilder().addComponents(selectMenu);
 
             const searchEmbed = createEmbed({
-                title: `${config.emojis.search} Kết quả tìm kiếm`,
-                description: `Tìm thấy **${tracks.length}** kết quả cho: **${truncate(query, 40)}**\n\n${trackList}\n\n*Chọn bài hát từ menu bên dưới ⬇️*`,
+                title: `${config.emojis.search} Kết quả tìm kiếm (${platformName})`,
+                description: `Tìm thấy **${displayTracks.length}** kết quả cho: **${truncate(query, 40)}**\n\n${trackList}\n\n*Chọn bài hát từ menu bên dưới ⬇️*`,
                 color: config.colors.primary,
             });
 
@@ -142,34 +131,18 @@ module.exports = {
                 });
 
                 const trackIndex = parseInt(interaction.values[0]);
-                const selectedTrack = tracks[trackIndex];
+                const selectedTrack = displayTracks[trackIndex];
+                selectedTrack.requestedBy = message.author;
 
                 await interaction.update({
                     embeds: [loadingEmbed(`Đang tải: **${truncate(selectedTrack.title, 50)}**...`)],
                     components: [],
                 });
 
-                const { track } = await player.play(voiceChannel, selectedTrack, {
-                    nodeOptions: {
-                        metadata: {
-                            channel: message.channel,
-                            requestedBy: message.author,
-                        },
-                        volume: config.player.defaultVolume,
-                        leaveOnEmpty: config.player.leaveOnEmpty,
-                        leaveOnEmptyCooldown: config.player.leaveOnEmptyCooldown,
-                        leaveOnEnd: config.player.leaveOnEnd,
-                        leaveOnEndCooldown: config.player.leaveOnEndCooldown,
-                        selfDeaf: config.player.selfDeaf,
-                    },
-                    requestedBy: message.author,
-                });
-
-                const queue = player.queues.get(message.guild.id);
-                const position = queue ? queue.tracks.size : 0;
+                const result = await addTrack(message.guild, voiceChannel, message.channel, selectedTrack);
 
                 await loadingMsg.edit({
-                    embeds: [trackAddedEmbed(track, position + 1)],
+                    embeds: [trackAddedEmbed(selectedTrack, result.position || 1)],
                     components: [],
                 });
 

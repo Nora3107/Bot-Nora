@@ -48,10 +48,20 @@ module.exports = {
         }
 
         embed.addFields({
+            name: '🔍 Tìm kiếm nền tảng',
+            value: [
+                `\`n!play <từ khóa>\` — Tìm trên **YouTube** (mặc định)`,
+                `\`n!play sc <từ khóa>\` — Tìm trên **SoundCloud**`,
+                `\`n!play yt <từ khóa>\` — Tìm trên **YouTube**`,
+                `\`n!play <URL>\` — Phát link trực tiếp (YT/SC/...)`,
+            ].join('\n'),
+        });
+
+        embed.addFields({
             name: '━━━━━━━━━━━━━━━━━━━━━━',
             value: [
-                `${config.emojis.star} **Nguồn hỗ trợ:** YouTube, Spotify, SoundCloud, Apple Music`,
-                `${config.emojis.link} Có thể dùng link hoặc từ khóa để tìm bài`,
+                `${config.emojis.star} **Engine:** yt-dlp + @discordjs/voice`,
+                `${config.emojis.link} Hỗ trợ YouTube, SoundCloud và hầu hết mọi nguồn`,
                 `${config.emojis.search} Tìm bằng từ khóa sẽ hiện danh sách để bạn chọn`,
             ].join('\n'),
         });

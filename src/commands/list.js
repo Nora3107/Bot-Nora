@@ -1,6 +1,6 @@
-const { useMainPlayer } = require('discord-player');
+const { getQueue } = require('../player');
 const { createEmbed, errorEmbed } = require('../utils/embed');
-const { truncate, formatQueueDuration } = require('../utils/formatters');
+const { truncate, formatDuration } = require('../utils/formatters');
 const { ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
 const config = require('../config');
 
@@ -11,13 +11,13 @@ module.exports = {
     usage: 'n!list',
 
     async execute(message) {
-        const queue = useMainPlayer().queues.get(message.guild.id);
+        const queue = getQueue(message.guild.id);
 
         if (!queue || !queue.currentTrack) {
             return message.reply({ embeds: [errorEmbed('Hàng đợi trống! Dùng `n!play` để thêm bài.')] });
         }
 
-        const tracks = queue.tracks.toArray();
+        const tracks = queue.tracks;
         const currentTrack = queue.currentTrack;
         const totalPages = Math.max(1, Math.ceil(tracks.length / config.queue.tracksPerPage));
         let currentPage = 0;
@@ -27,13 +27,12 @@ module.exports = {
             const end = start + config.queue.tracksPerPage;
             const pageTracks = tracks.slice(start, end);
 
-            const loopModes = ['Off', 'Track 🔂', 'Queue 🔁', 'Autoplay ♾️'];
-            const loopMode = loopModes[queue.repeatMode] || 'Off';
+            const repeatLabels = ['Off', 'Track 🔂', 'Queue 🔁'];
 
             let description = [
                 `### ${config.emojis.play} Đang phát`,
                 `**${truncate(currentTrack.title, 60)}** — ${currentTrack.author} \`[${currentTrack.duration}]\``,
-                `Requested by ${currentTrack.requestedBy || 'Unknown'}`,
+                `Requested by ${currentTrack.requestedBy?.username || 'Unknown'}`,
                 ``,
             ].join('\n');
 
@@ -41,18 +40,24 @@ module.exports = {
                 description += `### ${config.emojis.queue} Hàng đợi\n`;
                 description += pageTracks.map((track, i) => {
                     const index = start + i + 1;
-                    const requester = track.requestedBy ? ` | ${track.requestedBy}` : '';
+                    const requester = track.requestedBy ? ` | ${track.requestedBy.username}` : '';
                     return `\`${index}.\` **${truncate(track.title, 45)}** — \`${track.duration}\`${requester}`;
                 }).join('\n');
             } else {
                 description += `\n*Không có bài nào trong hàng đợi. Dùng \`n!play\` để thêm!*`;
             }
 
+            // Tính tổng thời lượng
+            let totalSec = (currentTrack.durationSec || 0);
+            for (const t of tracks) {
+                totalSec += (t.durationSec || 0);
+            }
+
             description += `\n\n━━━━━━━━━━━━━━━━━━━━━━`;
             description += `\n${config.emojis.music} **${tracks.length}** bài trong hàng đợi`;
-            description += ` | ${config.emojis.clock} Tổng: **${formatQueueDuration([currentTrack, ...tracks])}**`;
-            description += ` | ${config.emojis.loop} **${loopMode}**`;
-            description += ` | ${config.emojis.volume} **${queue.node.volume}%**`;
+            description += ` | ${config.emojis.clock} Tổng: **${formatDuration(totalSec)}**`;
+            description += ` | ${config.emojis.loop} **${repeatLabels[queue.repeatMode] || 'Off'}**`;
+            description += ` | ${config.emojis.volume} **${queue.volume}%**`;
 
             return createEmbed({
                 title: `${config.emojis.music} Hàng đợi nhạc`,

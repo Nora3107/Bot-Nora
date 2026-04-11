@@ -1,4 +1,4 @@
-const { useMainPlayer } = require('discord-player');
+const { getQueue, playTrack } = require('../player');
 const { successEmbed, errorEmbed } = require('../utils/embed');
 const config = require('../config');
 
@@ -9,21 +9,19 @@ module.exports = {
     usage: 'n!skip',
 
     async execute(message) {
-        const queue = useMainPlayer().queues.get(message.guild.id);
+        const queue = getQueue(message.guild.id);
 
-        if (!queue || !queue.isPlaying()) {
+        if (!queue || !queue.isPlaying) {
             return message.reply({ embeds: [errorEmbed('Hiện không có bài hát nào đang phát!')] });
         }
 
         const currentTrack = queue.currentTrack;
-        const success = queue.node.skip();
+        
+        // Dừng bài hiện tại → AudioPlayer sẽ emit 'idle' → tự phát bài tiếp
+        queue.player.stop();
 
-        if (success) {
-            return message.reply({
-                embeds: [successEmbed(`Đã bỏ qua: **${currentTrack.title}** ${config.emojis.skip}`)],
-            });
-        }
-
-        return message.reply({ embeds: [errorEmbed('Không thể bỏ qua bài hát này!')] });
+        return message.reply({
+            embeds: [successEmbed(`Đã bỏ qua: **${currentTrack?.title || 'bài hát'}** ${config.emojis.skip}`)],
+        });
     },
 };

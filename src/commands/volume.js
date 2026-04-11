@@ -1,4 +1,4 @@
-const { useMainPlayer } = require('discord-player');
+const { getQueue } = require('../player');
 const { successEmbed, errorEmbed, infoEmbed } = require('../utils/embed');
 const config = require('../config');
 
@@ -9,15 +9,15 @@ module.exports = {
     usage: 'n!vol [0-100]',
 
     async execute(message, args) {
-        const queue = useMainPlayer().queues.get(message.guild.id);
+        const queue = getQueue(message.guild.id);
 
-        if (!queue || !queue.isPlaying()) {
+        if (!queue || !queue.isPlaying) {
             return message.reply({ embeds: [errorEmbed('Hiện không có bài hát nào đang phát!')] });
         }
 
         // Không có argument → hiển thị volume hiện tại
         if (!args[0]) {
-            const vol = queue.node.volume;
+            const vol = queue.volume;
             const bar = createVolumeBar(vol);
             return message.reply({
                 embeds: [infoEmbed(`${config.emojis.volume} Âm lượng hiện tại: **${vol}%**\n${bar}`)],
@@ -32,7 +32,10 @@ module.exports = {
             });
         }
 
-        queue.node.setVolume(volume);
+        queue.volume = volume;
+        if (queue.currentResource && queue.currentResource.volume) {
+            queue.currentResource.volume.setVolume(volume / 100);
+        }
 
         const volumeIcon = volume === 0 ? config.emojis.volumeMute : config.emojis.volume;
         const bar = createVolumeBar(volume);

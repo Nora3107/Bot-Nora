@@ -1,0 +1,30 @@
+DỰ ÁN: NORA DISCORD MUSIC BOT
+=====================================
+
+1. GIỚI THIỆU
+- Tên bot: Nora
+- Chức năng chính: Phát nhạc chất lượng cao từ YouTube và SoundCloud trên các kênh thoại (voice channels) của Discord.
+- Công nghệ sử dụng: Node.js, thư viện discord.js (v14), @discordjs/voice (v0.19.2).
+
+2. VẤN ĐỀ TRƯỚC ĐÂY VÀ CÁCH GIẢI QUYẾT BÀI TOÁN YOUTUBE
+- Vấn đề 1 (Bị YouTube chặn): Trước đây bot sử dụng thư viện `discord-player`. Tuy nhiên, YouTube dạo gần đây đã cập nhật thuật toán chống bot rất gắt gao (yêu cầu Sign In, chặn IP datacenter), khiến thư viện này (và `ytdl-core`) hoàn toàn tê liệt, văng lỗi "Stream Extraction Error".
+- Giải pháp 1 (Custom Audio Engine): Tôi đã code lại toàn bộ hệ thống lõi Audio Player từ đầu (không dùng `discord-player` nữa). Thay vào đó, tôi tích hợp `yt-dlp` (thông qua `youtube-dl-exec`) - một công cụ cực mạnh liên tục được cập nhật để vượt qua lớp bảo vệ của YouTube.
+- Cách luồng âm thanh hoạt động:
+  + Dùng `yt-dlp` tìm kiếm và lấy "URL trực tiếp" (raw media URL) chứa file âm thanh.
+  + Dùng `ffmpeg` kết nối trực tiếp đến URL đó, xử lý âm thanh, rồi xuất thẳng ra định dạng OGG/Opus.
+
+- Vấn đề 2 (Lỗi kết nối Voice / DAVE Encryption): Dù tách được link nhạc, bot vẫn kết nối vào kênh thoại nhưng... im lặng, bị kẹt ở trạng thái "signalling". 
+- Giải pháp 2 (Nâng cấp chuẩn Voice Discord): Gần đây Discord đã âm thầm áp dụng DAVE (Mã hóa đầu cuối E2E) cho mọi voice channel. Thư viện `@discordjs/voice` phiên bản cũ (v0.17) mà bot dùng không theo kịp chuẩn mã hóa này nên bị server Discord từ chối nhận gói tin UDP. Tôi đã nâng cấp nó lên bản `0.19.2` mới nhất kèm theo thư viện mã hóa `sodium-native`. Kết quả là handshake thành công, nhạc phát mượt mà!
+
+3. TÍNH NĂNG ĐÃ HOÀN THIỆN
+- Hệ thống queue (hàng đợi) tùy chỉnh riêng biệt cho từng server.
+- Các lệnh chính (`n!play`, `n!stop`, `n!skip`, `n!pause`, `n!resume`, `n!volume`, `n!list`, `n!nowplaying`, `n!loop`, `n!shuffle`).
+- Hiển thị UI / Embed mượt mà và trực quan với thông tin chi tiết về bài hát.
+
+4. CẤU TRÚC CODE CHÍNH
+- `src/player.js`: Trái tim của con bot. Chứa mọi logic tải luồng (stream), quản lý hàng đợi, tương tác với @discordjs/voice.
+- `src/commands/*.js`: Bộ lệnh xử lý tương tác của người dùng.
+- Cơ chế tìm kiếm: Hỗ trợ tìm trực tiếp bằng YouTube (mặc định) hoặc SoundCloud (dùng prefix `sc`).
+
+5. ĐỊNH HƯỚNG BẢO TRÌ BÊN TRONG
+- Khi YouTube lại đổi thuật toán, chỉ cần update `youtube-dl-exec` (hoặc nâng cấp yt-dlp component). Không còn bị phụ thuộc vào sự bảo trì chậm chạp của các thư viện player quá phức tạp.

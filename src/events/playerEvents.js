@@ -68,26 +68,42 @@ function setupPlayerEvents(player) {
         const channel = queue.metadata?.channel;
         if (!channel) return;
 
-        channel.send({ embeds: [errorEmbed(`Lỗi phát nhạc: ${error.message}`)] }).catch(() => {});
+        // Phân loại lỗi YouTube
+        let errorMsg = `Lỗi phát nhạc: ${error.message}`;
+        if (error.message?.includes('403') || error.message?.includes('Sign in')) {
+            errorMsg = `YouTube đã chặn request. Thử:\n• Cập nhật cookie trong .env\n• Dùng link SoundCloud/Spotify thay thế`;
+        } else if (error.message?.includes('410') || error.message?.includes('Gone')) {
+            errorMsg = `Video không khả dụng hoặc đã bị xóa.`;
+        }
+
+        channel.send({ embeds: [errorEmbed(errorMsg)] }).catch(() => {});
     });
 
-    // Xử lý lỗi player (playerError)
-    player.events.on('playerError', (queue, error) => {
-        console.error(`Player error (track):`, error);
+    // Xử lý lỗi player (playerError) — lỗi khi đang stream track
+    player.events.on('playerError', (queue, error, track) => {
+        console.error(`Player error (track):`, error.message);
+        console.error(`  → Track: ${track?.title || 'unknown'}`);
+        console.error(`  → URL: ${track?.url || 'unknown'}`);
         const channel = queue.metadata?.channel;
         if (!channel) return;
 
-        channel.send({ embeds: [errorEmbed(`Không thể phát bài này. Đang thử bài tiếp theo...`)] }).catch(() => {});
+        let errorMsg = `Không thể phát bài **${track?.title || 'này'}**. Đang thử bài tiếp theo...`;
+
+        // Gợi ý nguyên nhân cụ thể
+        if (error.message?.includes('403') || error.message?.includes('Forbidden')) {
+            errorMsg += `\n\n💡 *Nguyên nhân: YouTube chặn IP/bot. Thử thêm cookie vào .env hoặc dùng link SoundCloud.*`;
+        } else if (error.message?.includes('ECONNRESET') || error.message?.includes('ETIMEDOUT')) {
+            errorMsg += `\n\n💡 *Nguyên nhân: Kết nối mạng bị gián đoạn.*`;
+        }
+
+        channel.send({ embeds: [errorEmbed(errorMsg)] }).catch(() => {});
     });
 
-    // ⚠️ QUAN TRỌNG: Phải lắng nghe error trên cả player (không chỉ player.events)
-    // Nếu thiếu, bot sẽ crash với "No event listener found for event error"
-    player.on('error', (error) => {
-        console.error('[Player Error]:', error.message || error);
-    });
-
+    // Debug logging
     player.events.on('debug', (queue, message) => {
-        // Chỉ log debug trong dev
+        if (process.env.NODE_ENV !== 'production') {
+            // console.log(`[Player Debug] ${message}`);
+        }
     });
 
     console.log('✅ Player events registered');

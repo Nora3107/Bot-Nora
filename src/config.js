@@ -13,6 +13,13 @@ module.exports = {
         clientSecret: process.env.SPOTIFY_CLIENT_SECRET || '',
     },
 
+    // YouTube authentication (optional nhưng khuyến nghị)
+    youtube: {
+        cookie: process.env.YOUTUBE_COOKIE || '',
+        // InnerTube client: "TVHTML5", "ANDROID", "WEB"
+        useClient: 'WEB',
+    },
+
     // Player settings
     player: {
         defaultVolume: 80,
