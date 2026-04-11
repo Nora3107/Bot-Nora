@@ -191,10 +191,19 @@ function getAudioUrl(url, title = '') {
 async function createStream(track) {
     const ffmpegPath = require('ffmpeg-static');
     
-    // Bước 1: Lấy direct audio URL, hỗ trợ fallback qua titles
-    const searchTitle = `${track.title} ${track.author}`;
-    const audioUrl = await getAudioUrl(track.url, searchTitle);
-    console.log(`[Stream] Got audio URL for: ${track.url.substring(0, 60)}...`);
+    let audioUrl;
+    // SOUNDCLOUD BRIDGE: Tránh lỗi 403 Forbidden của YouTube khi ffmpeg tải file trên máy chủ Render.
+    // Nếu track lấy từ youtube, ta bỏ qua YouTube và nối thẳng sang SoundCloud bằng tên bài hát.
+    if (track.url.includes('youtube.com') || track.url.includes('youtu.be')) {
+        const searchTitle = `${track.title} ${track.author}`.replace(/[^\w\s\u00C0-\u1EF9]/gi, ''); // Xóa kí tự đặc biệt để search cho chuẩn
+        console.log(`[Stream] 🌉 SoundCloud Bridge activated for: ${searchTitle}`);
+        audioUrl = await getAudioUrl(`scsearch1:${searchTitle}`);
+    } else {
+        // Các nền tảng khác thì lấy direct url bình thường
+        audioUrl = await getAudioUrl(track.url);
+    }
+
+    console.log(`[Stream] Final Audio URL ready!`);
 
     // Bước 2: FFmpeg đọc URL trực tiếp → output PCM s16le (tốt cho inlineVolume của Discord)
     const ffmpegProcess = spawn(ffmpegPath, [
@@ -469,7 +478,7 @@ async function playTrack(queue, track) {
         queue.textChannel.send({
             embeds: [{
                 color: config.colors.error,
-                description: `${config.emojis.error} Không thể phát **${track.title}**. Đang thử bài tiếp...`,
+                description: `${config.emojis.error} Không thể phát **${track.title}**.\nChi tiết: \`${error.message}\`\nĐang thử bài tiếp...`,
                 footer: { text: `${config.emojis.heart} Nora Music Bot` },
                 timestamp: new Date().toISOString(),
             }],
