@@ -3,7 +3,7 @@ services:
     name: nora-discord-bot
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install && mkdir -p node_modules/youtube-dl-exec/bin && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o node_modules/youtube-dl-exec/bin/yt-dlp && chmod +x node_modules/youtube-dl-exec/bin/yt-dlp
     startCommand: node src/index.js
     envVars:
       - key: DISCORD_TOKEN
@@ -16,6 +16,8 @@ services:
         sync: false
       - key: YOUTUBE_DL_SKIP_PYTHON_CHECK
         value: "1"
+      - key: YOUTUBE_DL_SKIP_DOWNLOAD
+        value: "true"
       - key: NODE_ENV
         value: production
 
