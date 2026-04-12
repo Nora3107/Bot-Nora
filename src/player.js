@@ -192,15 +192,42 @@ async function createStream(track) {
     const ffmpegPath = require('ffmpeg-static');
     
     let audioUrl;
-    // SOUNDCLOUD BRIDGE: Tránh lỗi 403 Forbidden của YouTube khi ffmpeg tải file trên máy chủ Render.
-    // Nếu track lấy từ youtube, ta bỏ qua YouTube và nối thẳng sang SoundCloud bằng tên bài hát.
-    if (track.url.includes('youtube.com') || track.url.includes('youtu.be')) {
-        const searchTitle = `${track.title} ${track.author}`.replace(/[^\w\s\u00C0-\u1EF9]/gi, ''); // Xóa kí tự đặc biệt để search cho chuẩn
-        console.log(`[Stream] 🌉 SoundCloud Bridge activated for: ${searchTitle}`);
-        audioUrl = await getAudioUrl(`scsearch1:${searchTitle}`);
-    } else {
-        // Các nền tảng khác thì lấy direct url bình thường
+    try {
+        console.log(`[Stream] Attempting direct fetch for: ${track.title}`);
+        // Luôn thử lấy audio url trực tiếp gốc (YouTube, v.v...) trước 
+        // Khi chạy trên máy local, mạng thường không bị block và sẽ lấy được nguồn chất lượng tốt nhất
         audioUrl = await getAudioUrl(track.url);
+    } catch (directError) {
+        // Nếu fetch trực tiếp bị lỗi (VD deploy trên Render hay bị YouTube block IP, trả về 403) thì nhảy sang Bridge SoundCloud
+        console.log(`[Stream] ⚠️ Direct fetch failed (${directError.message.split('\\n')[0]}). Falling back to SoundCloud...`);
+        
+        let bridgeSuccess = false;
+        
+        if (track.url.includes('youtube.com') || track.url.includes('youtu.be')) {
+            const fullSearchTitle = `${track.title} ${track.author}`.replace(/[^\w\s\u00C0-\u1EF9]/gi, ''); 
+            console.log(`[Stream] 🌉 SoundCloud Bridge activated for: ${fullSearchTitle}`);
+            try {
+                audioUrl = await getAudioUrl(`scsearch1:${fullSearchTitle}`);
+                bridgeSuccess = true;
+            } catch (error) {
+                console.log(`[Stream] 🌉 SC full search failed, retrying with shorter title...`);
+                const shortTitle = track.title
+                    .replace(/[\(\[].*?[\)\]]/g, '')
+                    .split('|')[0]
+                    .split('-')[0]
+                    .replace(/[^\w\s\u00C0-\u1EF9]/gi, '')
+                    .trim();
+                
+                try {
+                    audioUrl = await getAudioUrl(`scsearch1:${shortTitle}`);
+                    bridgeSuccess = true;
+                } catch (err2) {}
+            }
+        }
+        
+        if (!bridgeSuccess && !audioUrl) {
+            throw new Error(`Cả nguồn gốc lẫn SoundCloud Bridge đều không tải được audio (YouTube block).`);
+        }
     }
 
     console.log(`[Stream] Final Audio URL ready!`);
